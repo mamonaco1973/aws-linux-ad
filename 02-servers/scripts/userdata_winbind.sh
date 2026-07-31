@@ -25,7 +25,14 @@ export AWS_DEFAULT_REGION=us-east-1
 apt-get update -y
 apt-get install -y \
   realmd adcli krb5-user samba samba-common-bin winbind libpam-winbind \
-  libnss-winbind oddjob oddjob-mkhomedir packagekit awscli jq shellinabox
+  libnss-winbind oddjob oddjob-mkhomedir packagekit jq shellinabox curl unzip
+
+# AWS CLI v2 (the 'awscli' apt package was dropped in Ubuntu 24.04).
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q -o /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --update
+rm -rf /tmp/aws /tmp/awscliv2.zip
+export PATH="$PATH:/usr/local/bin"
 
 # ------------------------------------------------------------------------------
 # Domain admin credential (join only)

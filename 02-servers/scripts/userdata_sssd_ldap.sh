@@ -25,7 +25,14 @@ export AWS_DEFAULT_REGION=us-east-1
 apt-get update -y
 apt-get install -y \
   sssd sssd-tools libsss-sudo libnss-sss libpam-sss ldap-utils \
-  oddjob oddjob-mkhomedir ca-certificates curl awscli jq shellinabox
+  oddjob oddjob-mkhomedir ca-certificates curl unzip jq shellinabox
+
+# AWS CLI v2 (the 'awscli' apt package was dropped in Ubuntu 24.04).
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q -o /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --update
+rm -rf /tmp/aws /tmp/awscliv2.zip
+export PATH="$PATH:/usr/local/bin"
 
 # ------------------------------------------------------------------------------
 # Bind-account password (reuse the domain admin for this lab). It is written
