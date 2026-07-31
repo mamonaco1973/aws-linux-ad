@@ -39,7 +39,7 @@ module "mini_ad" {
   # ------------------------------------------------------------------------------
   # Authentication and User Provisioning
   # ------------------------------------------------------------------------------
-  ad_admin_password = random_password.admin_password.result
+  ad_admin_password = local.admin_password
   user_base_dn      = var.user_base_dn
   users_json        = local.users_json
 
@@ -76,9 +76,9 @@ locals {
     REALM        = var.realm
     NETBIOS      = var.netbios
 
-    jsmith_password = random_password.jsmith_password.result
-    edavis_password = random_password.edavis_password.result
-    rpatel_password = random_password.rpatel_password.result
-    akumar_password = random_password.akumar_password.result
+    jsmith_password = local.passwords["jsmith"]
+    edavis_password = local.passwords["edavis"]
+    rpatel_password = local.passwords["rpatel"]
+    akumar_password = local.passwords["akumar"]
   })
 }

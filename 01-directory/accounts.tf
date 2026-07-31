@@ -2,177 +2,112 @@
 # File: accounts.tf
 # ------------------------------------------------------------------------------
 # Purpose:
-#   - Generates Active Directory (AD) user credentials for lab and quick-start
-#     environments.
-#   - Stores all credentials securely in AWS Secrets Manager.
-#
-# Scope:
-#   - Creates a single AD Administrator account secret.
-#   - Creates multiple standard AD user account secrets.
-#   - Generates strong random passwords per account.
+#   - Generates Active Directory (AD) credentials for the lab and stores them in
+#     AWS Secrets Manager.
 #
 # Notes:
-#   - Passwords are generated at apply time and never logged.
-#   - Secrets are versioned automatically by AWS Secrets Manager.
-#   - Usernames are constructed using the NetBIOS domain prefix.
-#   - This file is intentionally explicit (non-dynamic) for clarity in
-#     instructional and demo environments.
+#   - Admin password is a strong 24-char random string (used programmatically
+#     for the domain join / LDAP bind — never typed).
+#   - USER passwords are friendly "<word>-<number>" (e.g. orange-481920) so they
+#     are easy to type into the shellinabox browser terminals during the demo.
+#     lower + digit + "-" satisfies AD's 3-of-4 complexity rule (no uppercase
+#     required).
 # ==============================================================================
 
-
 # ==============================================================================
-# AD ADMINISTRATOR ACCOUNT
+# AD ADMINISTRATOR ACCOUNT (strong, machine-used)
 # ==============================================================================
-
-# ------------------------------------------------------------------------------
-# Generate a random password for the AD Administrator account
-# ------------------------------------------------------------------------------
 resource "random_password" "admin_password" {
-  length           = 24   # Total password length
-  special          = true # Include special characters
-  override_special = "_-" # Restrict special characters to safe set
+  length           = 24
+  special          = true
+  override_special = "_-"
 }
 
-# ------------------------------------------------------------------------------
-# Secrets Manager secret for AD Administrator credentials
-# ------------------------------------------------------------------------------
+# Prepend "A" so the admin password can never START with a special character.
+# A leading "-"/"_" breaks CLI parsing and some domain-join tooling. Used for
+# BOTH the stored secret and the AD account so they always match.
+locals {
+  admin_password = "A${random_password.admin_password.result}"
+}
+
 resource "aws_secretsmanager_secret" "admin_secret" {
   name        = "admin_ad_credentials_efs"
-  description = "AD Administrator Credentials (EFS)"
+  description = "AD Administrator Credentials"
 
   lifecycle {
     prevent_destroy = false
   }
 }
 
-# ------------------------------------------------------------------------------
-# Store AD Administrator credentials as a versioned secret
-# ------------------------------------------------------------------------------
 resource "aws_secretsmanager_secret_version" "admin_secret_version" {
   secret_id = aws_secretsmanager_secret.admin_secret.id
 
   secret_string = jsonencode({
     username = "${var.netbios}\\Admin"
-    password = random_password.admin_password.result
+    password = local.admin_password
   })
 }
-
 
 # ==============================================================================
-# STANDARD AD USER ACCOUNTS
+# STANDARD AD USERS — friendly passwords
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# User: John Smith (jsmith)
-# ------------------------------------------------------------------------------
+locals {
+  ad_users = {
+    jsmith = "John Smith"
+    rpatel = "Raj Patel"
+    akumar = "Amit Kumar"
+    edavis = "Emily Davis"
+  }
 
-resource "random_password" "jsmith_password" {
-  length           = 24
-  special          = true
-  override_special = "!@#$%"
+  # Memorable words for user passwords (paired with a 6-digit number).
+  memorable_words = [
+    "bright", "simple", "orange", "window", "little", "people", "friend",
+    "yellow", "animal", "family", "circle", "moment", "summer", "button",
+    "planet", "rocket", "silver", "forest", "stream", "butter", "castle",
+    "wonder", "gentle", "driver", "coffee"
+  ]
 }
 
-resource "aws_secretsmanager_secret" "jsmith_secret" {
-  name        = "jsmith_ad_credentials_efs"
-  description = "John Smith AD Credentials (EFS)"
+# One random memorable word per user.
+resource "random_shuffle" "word" {
+  for_each     = local.ad_users
+  input        = local.memorable_words
+  result_count = 1
+}
+
+# One random 6-digit number per user.
+resource "random_integer" "num" {
+  for_each = local.ad_users
+  min      = 100000
+  max      = 999999
+}
+
+# Final password: <word>-<number>.
+locals {
+  passwords = {
+    for user, fullname in local.ad_users :
+    user => format("%s-%d", random_shuffle.word[user].result[0], random_integer.num[user].result)
+  }
+}
+
+# Per-user Secrets Manager entries.
+resource "aws_secretsmanager_secret" "user_secret" {
+  for_each    = local.ad_users
+  name        = "${each.key}_ad_credentials_efs"
+  description = "${each.value} AD credentials"
 
   lifecycle {
     prevent_destroy = false
   }
 }
 
-resource "aws_secretsmanager_secret_version" "jsmith_secret_version" {
-  secret_id = aws_secretsmanager_secret.jsmith_secret.id
+resource "aws_secretsmanager_secret_version" "user_secret_version" {
+  for_each  = local.ad_users
+  secret_id = aws_secretsmanager_secret.user_secret[each.key].id
 
   secret_string = jsonencode({
-    username = "${var.netbios}\\jsmith"
-    password = random_password.jsmith_password.result
-  })
-}
-
-
-# ------------------------------------------------------------------------------
-# User: Emily Davis (edavis)
-# ------------------------------------------------------------------------------
-
-resource "random_password" "edavis_password" {
-  length           = 24
-  special          = true
-  override_special = "!@#$%"
-}
-
-resource "aws_secretsmanager_secret" "edavis_secret" {
-  name        = "edavis_ad_credentials_efs"
-  description = "Emily Davis AD Credentials (EFS)"
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
-resource "aws_secretsmanager_secret_version" "edavis_secret_version" {
-  secret_id = aws_secretsmanager_secret.edavis_secret.id
-
-  secret_string = jsonencode({
-    username = "${var.netbios}\\edavis"
-    password = random_password.edavis_password.result
-  })
-}
-
-
-# ------------------------------------------------------------------------------
-# User: Raj Patel (rpatel)
-# ------------------------------------------------------------------------------
-
-resource "random_password" "rpatel_password" {
-  length           = 24
-  special          = true
-  override_special = "!@#$%"
-}
-
-resource "aws_secretsmanager_secret" "rpatel_secret" {
-  name        = "rpatel_ad_credentials_efs"
-  description = "Raj Patel AD Credentials (EFS)"
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
-resource "aws_secretsmanager_secret_version" "rpatel_secret_version" {
-  secret_id = aws_secretsmanager_secret.rpatel_secret.id
-
-  secret_string = jsonencode({
-    username = "${var.netbios}\\rpatel"
-    password = random_password.rpatel_password.result
-  })
-}
-
-
-# ------------------------------------------------------------------------------
-# User: Amit Kumar (akumar)
-# ------------------------------------------------------------------------------
-
-resource "random_password" "akumar_password" {
-  length           = 24
-  special          = true
-  override_special = "!@#$%"
-}
-
-resource "aws_secretsmanager_secret" "akumar_secret" {
-  name        = "akumar_ad_credentials_efs"
-  description = "Amit Kumar AD Credentials (EFS)"
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
-resource "aws_secretsmanager_secret_version" "akumar_secret_version" {
-  secret_id = aws_secretsmanager_secret.akumar_secret.id
-
-  secret_string = jsonencode({
-    username = "${var.netbios}\\akumar"
-    password = random_password.akumar_password.result
+    username = "${var.netbios}\\${each.key}"
+    password = local.passwords[each.key]
   })
 }
