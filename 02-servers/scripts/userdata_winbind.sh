@@ -103,6 +103,12 @@ EOF
 systemctl restart winbind smbd nmbd
 
 # ------------------------------------------------------------------------------
+# Passwordless sudo for the linux-admins domain group
+# ------------------------------------------------------------------------------
+echo "%linux-admins ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/10-linux-admins
+chmod 440 /etc/sudoers.d/10-linux-admins
+
+# ------------------------------------------------------------------------------
 # shellinabox — browser login on :80 (HTTP, no TLS — lab only)
 # ------------------------------------------------------------------------------
 sed -i 's/^SHELLINABOX_PORT=.*/SHELLINABOX_PORT=80/' /etc/default/shellinabox
