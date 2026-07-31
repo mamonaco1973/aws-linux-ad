@@ -93,6 +93,18 @@ resource "aws_security_group" "ad_ssh_sg" {
   }
 
   # ------------------------------------------------------------------------------
+  # INGRESS: shellinabox web terminal (TCP/80)
+  # ------------------------------------------------------------------------------
+  # Browse to http://<instance> for a login prompt (HTTP, no TLS — lab only).
+  ingress {
+    description = "Allow shellinabox web terminal from anywhere (demo only)"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # ------------------------------------------------------------------------------
   # INGRESS: ICMP (Ping)
   # ------------------------------------------------------------------------------
   ingress {

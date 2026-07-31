@@ -67,3 +67,17 @@ variable "vpc_name" {
   type        = string
   default     = "efs-vpc"
 }
+
+# ------------------------------------------------------------------------------
+# VARIABLE: dc_hostname
+# ------------------------------------------------------------------------------
+# Purpose:
+#   - Short hostname of the mini-AD domain controller (HOSTNAME_DC in the
+#     module, "ad1"). Combined with dns_zone to form the DC FQDN used by the
+#     sssd-ldap client for ldaps:// and the /ca.pem fetch.
+# ------------------------------------------------------------------------------
+variable "dc_hostname" {
+  description = "Short hostname of the mini-AD domain controller"
+  type        = string
+  default     = "ad1"
+}

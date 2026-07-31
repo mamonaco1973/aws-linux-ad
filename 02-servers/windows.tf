@@ -63,7 +63,6 @@ resource "aws_instance" "windows_ad_instance" {
   user_data = templatefile("./scripts/userdata.ps1", {
     admin_secret = "admin_ad_credentials_efs"
     domain_fqdn  = var.dns_zone
-    samba_server = aws_instance.efs_client_instance.private_dns
   })
 
   # ------------------------------------------------------------------------------
@@ -72,10 +71,4 @@ resource "aws_instance" "windows_ad_instance" {
   tags = {
     Name = "windows-ad-admin"
   }
-
-  # ------------------------------------------------------------------------------
-  # Dependency Ordering
-  # ------------------------------------------------------------------------------
-  # Ensures supporting Linux/Samba host exists before this admin host boots.
-  depends_on = [aws_instance.efs_client_instance]
 }

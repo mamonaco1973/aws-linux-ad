@@ -20,7 +20,9 @@
 # ================================================================================
 
 module "mini_ad" {
-  source = "github.com/mamonaco1973/module-aws-mini-ad"
+  # Local checkout so the added /ca.pem Flask route (for SSSD ldap-mode clients)
+  # is included. Swap back to the GitHub source to use the published module.
+  source = "../../module-aws-mini-ad"
 
   # ------------------------------------------------------------------------------
   # Domain Identity

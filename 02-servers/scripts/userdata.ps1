@@ -54,13 +54,6 @@ try {
         }
     }
 
-    Write-Output "Creating persistent drive mapping (Z:)"
-    $startup   = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp"
-    $batchFile = Join-Path $startup "map_drives.bat"
-    $command   = "net use Z: \\${samba_server}\efs /persistent:yes"
-    Set-Content -Path $batchFile -Value $command -Encoding ASCII
-    Write-Output "Drive mapping script created"
-
     Write-Output "Rebooting to finalize domain join"
     shutdown /r /t 5 /c "Initial EC2 reboot to join domain" /f /d p:4:1
 }
