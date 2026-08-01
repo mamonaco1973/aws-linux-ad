@@ -16,6 +16,12 @@ exec > >(tee -a /root/userdata.log | logger -t user-data -s 2>/dev/console) 2>&1
 trap 'echo "ERROR at line $LINENO"; exit 1' ERR
 echo "sssd-ldap user-data start ($(date -Is))"
 
+# Descriptive hostname for consistency. Note: this box does NOT join the domain,
+# so (unlike the other two) it creates NO computer object in AD — that's the
+# point of the ldap provider.
+hostnamectl set-hostname ${hostname}
+echo "preserve_hostname: true" > /etc/cloud/cloud.cfg.d/99-preserve-hostname.cfg
+
 export DEBIAN_FRONTEND=noninteractive
 export AWS_DEFAULT_REGION=us-east-1
 

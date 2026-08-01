@@ -70,6 +70,7 @@ resource "aws_instance" "linux" {
     dc_fqdn      = local.dc_fqdn
     base_dn      = local.base_dn
     bind_dn      = "CN=Admin,CN=Users,${local.base_dn}"
+    hostname     = "linux-${each.key}" # -> AD computer object name on join
   })
 
   tags = {
