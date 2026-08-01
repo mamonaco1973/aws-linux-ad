@@ -76,10 +76,11 @@ template shell = /bin/bash
 # POSIX UIDs read straight from AD (RFC2307). Keyed on the NetBIOS name, and
 # unix_primary_group=yes so the primary GID comes from the user's own gidNumber
 # rather than the (gidNumber-less) "Domain Users" primary group.
-idmap config ${netbios} : backend = ad
-idmap config ${netbios} : schema_mode = rfc2307
-idmap config ${netbios} : unix_nss_info = no
-idmap config ${netbios} : unix_primary_group = yes
+# EXPERIMENT (implicit IDs): 'rid' backend generates UIDs algorithmically from
+# each user's RID (a slice of the SID) instead of reading uidNumber from AD.
+# Winbind's rid algorithm differs from SSSD's, so a winbind box and an SSSD box
+# on the same domain will land on DIFFERENT UIDs for the same user.
+idmap config ${netbios} : backend = rid
 idmap config ${netbios} : range = 10000-1999999999
 idmap config * : backend = tdb
 idmap config * : range = 1-9999
