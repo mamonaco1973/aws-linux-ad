@@ -54,9 +54,7 @@ echo "$admin_password" | realm join -U "$admin_user" ${domain_fqdn} --verbose
 #   - home under /home/%u
 # ------------------------------------------------------------------------------
 sed -i 's/use_fully_qualified_names = True/use_fully_qualified_names = False/' /etc/sssd/sssd.conf
-# EXPERIMENT (implicit IDs): keep realmd's default ldap_id_mapping = True so
-# SSSD generates UIDs algorithmically from the SID instead of reading uidNumber.
-# sed -i 's/ldap_id_mapping = True/ldap_id_mapping = False/'                   /etc/sssd/sssd.conf
+sed -i 's/ldap_id_mapping = True/ldap_id_mapping = False/'                     /etc/sssd/sssd.conf
 sed -i 's|fallback_homedir = /home/%u@%d|fallback_homedir = /home/%u|'         /etc/sssd/sssd.conf
 
 pam-auth-update --enable mkhomedir

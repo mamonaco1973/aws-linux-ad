@@ -79,7 +79,7 @@ auth_provider = ldap
 ldap_uri = ldaps://${dc_fqdn}
 ldap_search_base = ${base_dn}
 ldap_schema = ad
-ldap_id_mapping = True
+ldap_id_mapping = False
 ldap_referrals = false
 
 ldap_default_bind_dn = ${bind_dn}
