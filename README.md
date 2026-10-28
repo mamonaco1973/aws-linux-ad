@@ -1,85 +1,151 @@
-# Linux + Active Directory: SSSD-ad vs Winbind vs SSSD-ldap
+# Linux + Active Directory on AWS: SSSD-ad vs Winbind vs SSSD-ldap
 
-A hands-on lab that joins **three Ubuntu machines to the same mini-Active-Directory
-three different ways**, so you can compare the approaches side by side:
+A hands-on lab that connects **three Ubuntu machines to the same mini-AD
+three different ways**, so you can compare the approaches side by side. All
+three read the **same POSIX `uidNumber`/`gidNumber` from AD**, so a user has
+the same UID on every box. A Windows admin host with ADUC lets you watch the
+AD side of each method.
 
-| Instance | Method | How it joins | ID mapping | Kerberos / computer object |
+| Instance | Method | How it connects | ID mapping | Computer object in AD |
 |---|---|---|---|---|
-| `linux-sssd-ad`   | **SSSD, AD provider**   | `realm join` (Kerberos) | POSIX (`ldap_id_mapping = False`) | yes |
-| `linux-winbind`   | **Winbind only**        | `realm join --client-software=winbind` | POSIX (`idmap backend = ad`) | yes |
-| `linux-sssd-ldap` | **SSSD, LDAP provider** | **no join** — LDAPS + bind account | POSIX (`ldap_id_mapping = False`) | **no** |
-
-All three read the **same POSIX `uidNumber`/`gidNumber` from AD**, so a user has
-the same UID on every box. A small **Windows admin host** (RSAT / ADUC) is
-included so you can watch the AD side per scenario — e.g. a computer object
-appears for `sssd-ad` and `winbind`, but **not** for `sssd-ldap`.
+| `linux-sssd-ad` | **SSSD, AD provider** | `realm join` (Kerberos) | POSIX (`ldap_id_mapping = False`) | yes |
+| `linux-winbind` | **Winbind** | `realm join --client-software=winbind` | POSIX (`idmap backend = ad`) | yes |
+| `linux-sssd-ldap` | **SSSD, LDAP provider** | **no join**: LDAPS with a bind account | POSIX (`ldap_id_mapping = False`) | **no** |
+| `windows-ad-admin` | domain member | `Add-Computer` | n/a | yes |
 
 Each Linux box runs **shellinabox on port 80**, so you test by browsing to
-`http://<instance>` and logging in as a domain user — exactly like SSH, but it
-exercises that box's PAM/identity stack.
+`http://<instance>` and signing in as a domain user. That exercises the box's
+PAM and identity stack exactly as SSH would.
 
 ## Architecture
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="architecture-dark.svg">
+  <img alt="Three Ubuntu instances join the same Samba mini-AD three different ways: linux-sssd-ad with SSSD's AD provider and Kerberos, linux-winbind with winbind and Kerberos, and linux-sssd-ldap with SSSD's LDAP provider over LDAPS and no join at all, trusting the DC's CA fetched from /ca.pem. Each serves a shellinabox login on port 80. A Windows Server 2022 host joins the domain for ADUC. All four read the AD admin password from Secrets Manager. The DC sits in a private subnet behind a NAT gateway." src="architecture-light.svg">
+</picture>
+
+Regenerate with `python3 make_diagram.py`.
+
+- **`01-directory/`**: the VPC (`efs-vpc`) with public VM subnets and a
+  private DC subnet, the NAT gateway, the AD passwords in Secrets Manager,
+  and the [`module-aws-mini-ad`](https://github.com/mamonaco1973/module-aws-mini-ad)
+  Samba DC with users and POSIX attributes from
+  `scripts/users.json.template`. DHCP points the VPC's DNS at the DC.
+- **`02-servers/`**: the three Ubuntu clients (`t3.small`, one per
+  method, each with its own `userdata_*.sh`) and the Windows admin host
+  (`t3.medium`).
+
+## The SSSD-ldap catch: it needs a CA
+
+The LDAP provider authenticates with a simple bind, so it **must** run over
+LDAPS, and the client has to trust the DC's TLS certificate. A Samba DC
+generates its own CA, and the mini-AD module serves it at
+`http://<dc>/ca.pem`, so `linux-sssd-ldap` downloads it at boot into
+`/etc/sssd/mini-ad-ca.pem`. Against AWS Managed Microsoft AD you'd deploy
+AD CS instead and distribute its root.
+
+| User | Groups | sudo on Linux |
+|---|---|---|
+| jsmith | mcloud-users, us, linux-admins, Domain Admins | yes |
+| edavis | mcloud-users, us | no |
+| rpatel | mcloud-users, india, linux-admins, Domain Admins | yes |
+| akumar | mcloud-users, india | no |
+
+| Group | gidNumber |
+|---|---|
+| mcloud-users | 10001 |
+| us | 10002 |
+| india | 10003 |
+| linux-admins | 10004 |
+
+## Security groups
+
 ```
-                 mini-AD (Samba DC, "ad1")  ── serves DNS, Kerberos, LDAP/LDAPS,
-                        │                        and /ca.pem (its public CA)
-        ┌───────────────┼───────────────┬────────────────────┐
-   linux-sssd-ad   linux-winbind   linux-sssd-ldap      windows-ad-admin
-   (SSSD ad)       (winbind)       (SSSD ldap, LDAPS)   (RSAT / ADUC)
-   shellinabox:80  shellinabox:80  shellinabox:80        RDP:3389
+internet ─80, 22, 445─▶ linux-sssd-ad, linux-winbind, linux-sssd-ldap
+internet ─3389────────▶ windows-ad-admin
 ```
 
-- **`01-directory/`** — VPC, subnets, NAT, and the `module-aws-mini-ad` Samba DC
-  (users + POSIX attributes from `users.json`). DHCP points VPC DNS at the DC.
-- **`02-servers/`** — the three Ubuntu clients (one per method) + the Windows
-  admin host.
+`efs-ssh-security-group` and `efs-rdp-security-group` allow those ports from `0.0.0.0/0`. The DC has no
+public address.
 
-> The project points at a **local** copy of `module-aws-mini-ad` (`../../module-aws-mini-ad`)
-> because it adds a `/ca.pem` route to the DC's Flask app so the SSSD-`ldap`
-> client can fetch the Samba CA and trust `ldaps://`.
+## Prerequisites
 
-## The SSSD-`ldap` gotcha (why it needs a CA)
+* [An AWS Account](https://aws.amazon.com/console/)
+* [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+* [Install Terraform](https://developer.hashicorp.com/terraform/install)
+* [Install jq](https://jqlang.github.io/jq/download/)
 
-`ldap`-mode auth is a simple bind, so it **must** run over LDAPS, which means the
-client has to trust the DC's TLS cert. A Samba DC auto-generates its own CA, so
-the client just fetches `http://ad1.<domain>/ca.pem` at boot. Against **AWS
-Managed AD** you'd instead deploy AD CS and distribute that root — the "you need
-a CA" cost is a Samba-lab shortcut here.
+If this is your first time watching our content, we recommend starting with
+this video: [AWS + Terraform: Easy Setup](https://youtu.be/BCMQo0CB9wk).
 
 ## Deploy
 
 ```bash
-./check_env.sh        # verify aws / terraform / jq
-./apply.sh            # phase 1: 01-directory (mini-AD), phase 2: 02-servers
-./validate.sh         # prints the browser-terminal + RDP URLs
+git clone https://github.com/mamonaco1973/aws-linux-ad.git
+cd aws-linux-ad
+./apply.sh       # 1: VPC + mini-AD + secrets  2: three Linux clients + Windows host
 ```
 
-## Test / compare
+Everything deploys to `us-east-1`. `apply.sh` ends by running
+`validate.sh`, which waits for shellinabox on each Linux client and prints a
+browser URL for each, plus the Windows host:
 
-Browse to each `http://<linux-box>` and log in as `jsmith` / `rpatel` (password
-in Secrets Manager), then run the same commands on all three and compare:
+```
+============================================================================
+Linux + Active Directory - Three-Way Quick Start
+============================================================================
 
-```bash
-id jsmith
-getent passwd jsmith
-getent group linux-admins
-getent group mcloud-users
+NOTE: SSSD (AD provider)     -> http://ec2-203-0-113-11.compute-1.amazonaws.com
+NOTE: Winbind only           -> http://ec2-203-0-113-12.compute-1.amazonaws.com
+NOTE: SSSD (LDAP provider)   -> http://ec2-203-0-113-13.compute-1.amazonaws.com
+NOTE: Windows ADUC host (RDP)   -> ec2-203-0-113-20.compute-1.amazonaws.com
 ```
 
-On the Windows host (RDP), open **Active Directory Users and Computers** to see
-what each method did to the directory (computer objects, group membership,
-POSIX attributes).
+## Try it
+
+1. Get a user's password:
+
+   ```bash
+   aws secretsmanager get-secret-value --secret-id jsmith_ad_credentials_efs \
+     --query SecretString --output text | jq -r .password
+   ```
+
+2. Open each Linux URL, sign in as `jsmith`, and run the same commands on all
+   three:
+
+   ```bash
+   id jsmith
+   getent passwd jsmith
+   getent group linux-admins
+   getent group mcloud-users
+   ```
+
+   ![Linux client](linux.png)
+
+3. RDP to the Windows host as `MCLOUD\jsmith` and open **Active Directory
+   Users and Computers**: computer objects exist for `linux-sssd-ad` and
+   `linux-winbind`, but not for `linux-sssd-ldap`.
+
+   ![Windows admin host](windows.png)
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| A Linux URL doesn't load | That box is still booting; `validate.sh` waits for each. `aws ssm start-session --target <instance-id>` and read its cloud-init log. |
+| `linux-sssd-ldap` can't authenticate | It must trust the DC's CA: check `/etc/sssd/mini-ad-ca.pem` exists and that `curl http://<dc>/ca.pem` works from the box. |
+| `id jsmith` differs between boxes | It shouldn't: all three use the POSIX IDs in AD. `sudo sss_cache -E` (SSSD) or `sudo net cache flush` (winbind) clears stale lookups. |
 
 ## Teardown
 
 ```bash
-./destroy.sh          # tears down both phases and cleans up the demo secrets
+./destroy.sh     # destroys both phases and deletes the demo secrets
 ```
 
 ## Notes
 
-- **Lab only.** shellinabox is HTTP (no TLS) on port 80, security groups are open
-  to `0.0.0.0/0`, and the SSSD-`ldap` box reuses the domain admin as its bind
-  account (its password lands in `sssd.conf`). None of this is production-safe.
-- Users, groups, and POSIX IDs are defined in
-  `01-directory/scripts/users.json.template`.
+- **Lab only.** shellinabox is plain HTTP on port 80, the security groups are
+  open to `0.0.0.0/0`, and `linux-sssd-ldap` uses the domain `Admin` as its
+  bind account, so that password is in its `sssd.conf`.
+- The secret and VPC names end in `_efs` / `efs-vpc` because this lab was
+  built from the aws-efs project.
